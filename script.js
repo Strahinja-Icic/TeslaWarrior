@@ -5,6 +5,7 @@ let checkB = document.getElementById("checkButton");
 let cItemB = document.getElementById("cItemButton");
 let clearB = document.getElementById("clearButton");
 let restartB = document.getElementById("restartBattle");
+let skipB = document.getElementById("skipButton");
 
 let playerStatsP = document.getElementById("playerStats");
 let enemyStatsP = document.getElementById("enemyStats");
@@ -19,13 +20,14 @@ function UniversalStats(hp, maxhp, defense, resistance, attackPower) // Object c
     this.HP = parseInt(hp),
     this.MaxHP = parseInt(maxhp),
     this.Defense = parseInt(defense),
-    this.Resistance = parseFloat(resistance), // Percentage which can range from 100% to -∞%
+    this.Resistance = parseFloat(resistance),
     this.AttackPower = parseInt(attackPower),
+    this.Dead = false,
 
     this.damageHP = function(dmg) // Returns true if the entity was killed, false otherwise.
     {
-        if (this.HP <= 0)
-            return false; // This doesn't let the entity get damaged if it's hp is 0 or less, useful for detirmining if the entity was actually killed or not when the method is called.
+        if (this.Dead)
+            return false; // This doesn't let the entity get damaged if it's already dead, useful for detirmining if the entity was actually killed or not when the method is called.
         
         let defenseEquation = parseInt(dmg - this.Defense);
         let resistanceEquation = parseFloat(1 - this.Resistance);
@@ -41,19 +43,32 @@ function UniversalStats(hp, maxhp, defense, resistance, attackPower) // Object c
         this.HP -= dmgToInflict;
 
         if (this.HP <= 0)
+        {
+            this.Dead = true;
             return true;
+        }
         else
             return false;
     },
 
-    this.healHP = function(amount, healPastMax)
+    this.healHP = function(amount, healPastMax) // Returns true if the entity was healed to or past max HP.
     {
-        this.HP += amount;
+        let HPafterHeal = this.HP += amount;
 
-        if (healPastMax)
-            return;
-        else if (this.HP > this.MaxHP)
+        if (HPafterHeal >= this.MaxHP && !healPastMax)
+        {
             this.HP = this.MaxHP;
+            return true;
+        }
+        else if (HPafterHeal >= this.MaxHP && healPastMax)
+        {
+            this.HP = HPafterHeal;
+            return true;
+        }
+        else
+            this.HP = HPafterHeal;
+
+        return false;
     }
 }
 
@@ -75,12 +90,17 @@ function clearOutput()
 
 
 
-function attackEnemy()
+function attackEnemy() // Returns true if the attack was successful, false otherwise
 {
-    if (player.HP <= 0)
+    if (player.Dead)
     {
         addMessageInOutput("Can\'t attack cuz ur ded.");
-        return;
+        return false;
+    }
+    else if (enemy.Dead)
+    {
+        addMessageInOutput("The enemy is already dead!");
+        return false;
     }
 
     let bool = enemy.damageHP(player.AttackPower); // Returns true if the enemy was killed by this attack
@@ -90,29 +110,38 @@ function attackEnemy()
     else
         addMessageInOutput("The player has attacked the enemy.");
     
-    enemyTurn();
     updateDisplayedStats();
+    return true;
 }
 
 function defend()
 {
-    addMessageInOutput("Skipped");
-    enemyTurn();
+    player.Resistance = 1;
+    addMessageInOutput("Defended");
 }
 
 function checkEnemy()
 {
-    addMessageInOutput("Checked");
+    addMessageInOutput(`Enemy MaxHP: ${enemy.MaxHP}; Enemy DEF: ${enemy.Defense}; Enemy RES: ${enemy.Resistance}`);
 }
 
 function useConsumableItem()
 {
-    addMessageInOutput("Used item");
+    let bool = player.healHP(4, false);
+
+    addMessageInOutput("Used item.");
+
+    if (bool)
+        addMessageInOutput("Healed to max HP.");
+    else
+        addMessageInOutput("healed 4HP");
+
+    updateDisplayedStats();
 }
 
 function enemyTurn()
 {
-    if (enemy.HP > 0)
+    if (enemy.HP > 0 && !player.Dead)
     {
         let bool = player.damageHP(enemy.AttackPower);
         addMessageInOutput("The enemy has attacked the player.");
@@ -125,16 +154,19 @@ function enemyTurn()
 }
 
 
+
 function updateDisplayedStats()
 {
-    playerStatsP.textContent = `Player HP: ${player.HP}; Player ATK: ${player.AttackPower}`; // First time hearing about backticks (`) in my life, reminder for self: they're located to the left of the 1 key
+    playerStatsP.textContent = `Player HP: ${player.HP}; Player ATK: ${player.AttackPower}; Player DEF: ${player.Defense}; Player RES: ${player.Resistance}`; // First time hearing about backticks (`) in my life, reminder for self: they're located to the left of the 1 key
     enemyStatsP.textContent = `Enemy HP: ${enemy.HP}; Enemy ATK: ${enemy.AttackPower}`;
 }
 
 function restartBattle()
 {
     player.HP = player.MaxHP;
+    player.Dead = false;
     enemy.HP = enemy.MaxHP;
+    enemy.Dead = false;
 
     clearOutput();
     updateDisplayedStats();
@@ -143,14 +175,45 @@ function restartBattle()
 
 
 // Event listeners
-attackB.addEventListener("click", attackEnemy);
-defendB.addEventListener("click", defend);
+attackB.addEventListener("click", function()
+{
+    attackEnemy();
+    enemyTurn();
+});
+
+defendB.addEventListener("click", function()
+{
+    if (!player.Dead)
+    {
+        defend();
+        enemyTurn();
+        player.Resistance = 0;
+    }
+    else
+        addMessageInOutput("Can\'t do this action while dead.");
+
+});
+
 checkB.addEventListener("click", checkEnemy);
-cItemB.addEventListener("click", useConsumableItem);
+
+cItemB.addEventListener("click", function()
+{
+    if (!player.Dead)
+        useConsumableItem();
+    else
+        addMessageInOutput("Can\'t do this action while dead.");
+});
+
+skipB.addEventListener("click", function()
+{
+    if (!player.Dead)
+        enemyTurn();
+    else
+        addMessageInOutput("Can\'t do this action while dead.");
+});
 
 clearB.addEventListener("click", clearOutput);
 restartB.addEventListener("click", restartBattle)
-
 //
 
 
