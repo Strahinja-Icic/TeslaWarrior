@@ -1,3 +1,11 @@
+/*
+Current tasks:
+- Look over the code and make optimizations if needed (always do this)
+- Add enemySpecific stats
+- Add support for multiple enemies during battle
+
+*/
+
 // Important HTML elements
 let attackB = document.getElementById("attackButton");
 let defendB = document.getElementById("defendButton");
@@ -24,10 +32,10 @@ function UniversalStats(hp, maxhp, defense, resistance, attackPower) // Object c
     this.AttackPower = parseInt(attackPower),
     this.Dead = false,
 
-    this.damageHP = function(dmg) // Returns true if the entity was killed, false otherwise.
+    this.damageHP = function(dmg) // Returns an array which contains a boolean and a number, the boolean is true if the entity was killed and false if it wasn't, the number represents how much damage has been done to the entity.
     {
         if (this.Dead)
-            return false; // This doesn't let the entity get damaged if it's already dead, useful for detirmining if the entity was actually killed or not when the method is called.
+            return [false, 0]; // This doesn't let the entity get damaged if it's already dead, useful for detirmining if the entity was actually killed or not when the method is called.
         
         let defenseEquation = parseInt(dmg - this.Defense);
         let resistanceEquation = parseFloat(1 - this.Resistance);
@@ -45,10 +53,10 @@ function UniversalStats(hp, maxhp, defense, resistance, attackPower) // Object c
         if (this.HP <= 0)
         {
             this.Dead = true;
-            return true;
+            return [true, dmgToInflict];
         }
         else
-            return false;
+            return [false, dmgToInflict];
     },
 
     this.healHP = function(amount, healPastMax) // Returns true if the entity was healed to or past max HP.
@@ -74,6 +82,12 @@ function UniversalStats(hp, maxhp, defense, resistance, attackPower) // Object c
 
 let player = new UniversalStats(10, 10, 0, 0, 2); //Using the object constructor to create the player and the enemy
 let enemy = new UniversalStats(4, 4, 0, 0, 2);
+
+let playerSpecific = {}
+playerSpecific.Coins = 0;
+playerSpecific.Defending = false;
+playerSpecific.AdditionalDEF = 20; // Additional stats are applied when the player is defending
+playerSpecific.AdditionalRES = 0;
 //
 
 
@@ -88,65 +102,81 @@ function clearOutput()
     output.innerHTML = "This is the output.<br>";
 }
 
-
-
-function attackEnemy() // Returns true if the attack was successful, false otherwise
+function playerTurn(option) // Returns true if the turn was successful, false otherwise
 {
+    /*
+    option values:
+    1 - Attack,
+    2 - Defend,
+    3 - Check,
+    4 - Use consumable item,
+    Other - Skip turn 
+    */
+
     if (player.Dead)
     {
-        addMessageInOutput("Can\'t attack cuz ur ded.");
+        addMessageInOutput("Can\'t do this action because the player is dead.");
         return false;
     }
-    else if (enemy.Dead)
+
+    switch (option)
     {
-        addMessageInOutput("The enemy is already dead!");
-        return false;
+        case 1: // Attack
+            if (enemy.Dead)
+            {
+                addMessageInOutput("Can\'t do this action because the enemy is dead.");
+                return false;
+            }
+
+            let returnValue = enemy.damageHP(player.AttackPower); // Returns true if the enemy was killed by this attack
+            
+            addMessageInOutput(`The player has attacked the enemy and has dealt ${returnValue[1]} damage.`);
+            if (returnValue[0])
+                addMessageInOutput("The player has killed the enemy.");
+            
+            updateDisplayedStats();
+            return true;
+
+        case 2: // Defend
+            playerSpecific.Defending = true;
+
+            player.Defense += playerSpecific.AdditionalDEF;
+            player.Resistance += playerSpecific.AdditionalRES;
+
+            return true;
+
+        case 3: // Check
+            addMessageInOutput(`Enemy HP: ${enemy.HP}; Enemy MaxHP: ${enemy.MaxHP}; Enemy DEF: ${enemy.Defense}; Enemy RES: ${enemy.Resistance}; Enemy ATK: ${enemy.AttackPower};`);
+            return true;
+
+        case 4: // Use consumable item, for now it heals 4HP everytime it's used
+            let bool = player.healHP(4, false);
+
+            addMessageInOutput("Used item.");
+
+            if (bool)
+                addMessageInOutput("Healed to max HP.");
+            else
+                addMessageInOutput("healed 4HP");
+
+            updateDisplayedStats();
+
+            return true;
+
+        default:
+            addMessageInOutput("Skipped turn.");
+            return true;
     }
-
-    let bool = enemy.damageHP(player.AttackPower); // Returns true if the enemy was killed by this attack
-
-    if (bool)
-        addMessageInOutput("The player has killed the enemy.");
-    else
-        addMessageInOutput("The player has attacked the enemy.");
-    
-    updateDisplayedStats();
-    return true;
-}
-
-function defend()
-{
-    player.Resistance = 1;
-    addMessageInOutput("Defended");
-}
-
-function checkEnemy()
-{
-    addMessageInOutput(`Enemy MaxHP: ${enemy.MaxHP}; Enemy DEF: ${enemy.Defense}; Enemy RES: ${enemy.Resistance}`);
-}
-
-function useConsumableItem()
-{
-    let bool = player.healHP(4, false);
-
-    addMessageInOutput("Used item.");
-
-    if (bool)
-        addMessageInOutput("Healed to max HP.");
-    else
-        addMessageInOutput("healed 4HP");
-
-    updateDisplayedStats();
 }
 
 function enemyTurn()
 {
     if (enemy.HP > 0 && !player.Dead)
     {
-        let bool = player.damageHP(enemy.AttackPower);
-        addMessageInOutput("The enemy has attacked the player.");
+        let returnValue = player.damageHP(enemy.AttackPower);
+        addMessageInOutput(`The enemy has attacked the player and has dealt ${returnValue[1]} damage.`);
         
-        if (bool)
+        if (returnValue[0])
             addMessageInOutput("You\'ve died!");
 
         updateDisplayedStats();
@@ -177,39 +207,36 @@ function restartBattle()
 // Event listeners
 attackB.addEventListener("click", function()
 {
-    attackEnemy();
+    playerTurn(1);
     enemyTurn();
 });
 
 defendB.addEventListener("click", function()
 {
-    if (!player.Dead)
-    {
-        defend();
-        enemyTurn();
-        player.Resistance = 0;
-    }
-    else
-        addMessageInOutput("Can\'t do this action while dead.");
+    playerTurn(2);
+    enemyTurn();
 
+    player.Defending = false;
+    player.Defense -= playerSpecific.AdditionalDEF;
+    player.Resistance -= playerSpecific.AdditionalRES;
+    updateDisplayedStats();
 });
 
-checkB.addEventListener("click", checkEnemy);
+checkB.addEventListener("click", function()
+{
+    playerTurn(3);
+});
 
 cItemB.addEventListener("click", function()
 {
-    if (!player.Dead)
-        useConsumableItem();
-    else
-        addMessageInOutput("Can\'t do this action while dead.");
+    playerTurn(4);
+    enemyTurn();
 });
 
 skipB.addEventListener("click", function()
 {
-    if (!player.Dead)
-        enemyTurn();
-    else
-        addMessageInOutput("Can\'t do this action while dead.");
+    playerTurn(-1);
+    enemyTurn();
 });
 
 clearB.addEventListener("click", clearOutput);
